@@ -16,12 +16,19 @@ func main() {
 		fmt.Fprintf(ctx.W, "hello world2")
 	})
 
+	engine.Post("/user/create/:cord", func(ctx *msgo.Context) {
+		fmt.Fprintf(ctx.W, ctx.R.PostFormValue("cord"))
+	})
+
 	v1 := engine.Group("/v1")
 	v1.Get("/name", func(ctx *msgo.Context) {
 		fmt.Fprintf(ctx.W, "get gaoge")
 	})
 	v1.Post("/name", func(ctx *msgo.Context) {
 		fmt.Fprintf(ctx.W, "post gaoge")
+	})
+	v1.Post("/name/:id", func(ctx *msgo.Context) {
+		fmt.Fprintf(ctx.W, ctx.R.FormValue("id"))
 	})
 
 	engine.Run()

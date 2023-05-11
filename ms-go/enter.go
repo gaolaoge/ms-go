@@ -5,8 +5,14 @@ import (
 	"net/http"
 )
 
+/*
+1. 静态路由，
+2. 支持 分组，
+3. 支持 restful ，
+4. 动态路由，尚未支持
+*/
+
 type HandleFunc func(ctx *Context)
-type HandleFuncMap map[string]HandleFunc
 type MethodType = string
 
 const (
@@ -15,26 +21,28 @@ const (
 	POST MethodType = "POST"
 )
 
-type MethodHandleMap map[MethodType]HandleFuncMap
+type MethodHandleMap map[MethodType]HandleFunc
+type HandleFuncMap map[string]MethodHandleMap
 
 type routerGroup struct {
-	name                string
-	handleMethodFuncMap MethodHandleMap
+	name          string
+	handleFuncMap HandleFuncMap
+	treeNode      *treeNode
 }
 
 func (rg *routerGroup) Add(name string, handleFunc HandleFunc) {
-	initRouterGroup(rg, ANY)
-	rg.handleMethodFuncMap[ANY][name] = handleFunc
+	initRouterGroup(rg, rg.name+name)
+	rg.handleFuncMap[rg.name+name][ANY] = handleFunc
 }
 
 func (rg *routerGroup) Get(name string, handleFunc HandleFunc) {
-	initRouterGroup(rg, GET)
-	rg.handleMethodFuncMap[GET][name] = handleFunc
+	initRouterGroup(rg, rg.name+name)
+	rg.handleFuncMap[rg.name+name][GET] = handleFunc
 }
 
 func (rg *routerGroup) Post(name string, handleFunc HandleFunc) {
-	initRouterGroup(rg, POST)
-	rg.handleMethodFuncMap[POST][name] = handleFunc
+	initRouterGroup(rg, rg.name+name)
+	rg.handleFuncMap[rg.name+name][POST] = handleFunc
 }
 
 type router struct {
@@ -44,26 +52,27 @@ type router struct {
 func (r *router) Group(name string) *routerGroup {
 	// TODO 这里需要判断 group 是否已被创建过
 	newGroup := &routerGroup{
-		name:                name,
-		handleMethodFuncMap: make(MethodHandleMap),
+		name:          name,
+		handleFuncMap: make(HandleFuncMap),
+		treeNode:      &treeNode{name: name, children: make([]*treeNode, 0)},
 	}
 	r.routerGroups = append(r.routerGroups, newGroup)
 	return newGroup
 }
 
 func (r *router) Add(name string, handleFunc HandleFunc) {
-	initRouterGroup(r.routerGroups[0], ANY)
-	r.routerGroups[0].handleMethodFuncMap[ANY][name] = handleFunc
+	initRouterGroup(r.routerGroups[0], name)
+	r.routerGroups[0].handleFuncMap[name][ANY] = handleFunc
 }
 
 func (r *router) Get(name string, handleFunc HandleFunc) {
-	initRouterGroup(r.routerGroups[0], GET)
-	r.routerGroups[0].handleMethodFuncMap[GET][name] = handleFunc
+	initRouterGroup(r.routerGroups[0], name)
+	r.routerGroups[0].handleFuncMap[name][GET] = handleFunc
 }
 
 func (r *router) Post(name string, handleFunc HandleFunc) {
-	initRouterGroup(r.routerGroups[0], POST)
-	r.routerGroups[0].handleMethodFuncMap[POST][name] = handleFunc
+	initRouterGroup(r.routerGroups[0], name)
+	r.routerGroups[0].handleFuncMap[name][POST] = handleFunc
 }
 
 type Engine struct {
@@ -71,36 +80,22 @@ type Engine struct {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 1. 遍历 groups 匹配到 URL
+	// 1. 遍历 groups 匹配 treeNode
 	// 2. 在 methodMap 中匹配 method
 	curMethod := r.Method
-	var url string
 	for _, group := range e.routerGroups {
-
-		if len(group.handleMethodFuncMap[ANY]) > 0 {
-			for name, handle := range group.handleMethodFuncMap[ANY] {
-				if group.name == "default" {
-					url = name
-				} else {
-					url = group.name + name
-				}
-				if url == r.RequestURI {
-					handle(&Context{w, r})
-					return
-				}
+		node := group.treeNode.Get(r.RequestURI)
+		if node != nil {
+			resultMap := group.handleFuncMap[node.routerName]
+			handle := resultMap[ANY]
+			if handle != nil {
+				handle(&Context{w, r})
+				return
 			}
-		}
-		if len(group.handleMethodFuncMap[curMethod]) > 0 {
-			for name, handle := range group.handleMethodFuncMap[curMethod] {
-				if group.name == "default" {
-					url = name
-				} else {
-					url = group.name + name
-				}
-				if url == r.RequestURI {
-					handle(&Context{w, r})
-					return
-				}
+			handle = resultMap[curMethod]
+			if handle != nil {
+				handle(&Context{w, r})
+				return
 			}
 		}
 	}
@@ -117,15 +112,17 @@ func New() *Engine {
 	return &Engine{
 		router{
 			routerGroups: []*routerGroup{{
-				name:                "default",
-				handleMethodFuncMap: map[MethodType]HandleFuncMap{ANY: make(HandleFuncMap)},
+				name:          "default",
+				handleFuncMap: make(HandleFuncMap),
+				treeNode:      &treeNode{name: "/", children: make([]*treeNode, 0)},
 			}},
 		},
 	}
 }
 
-func initRouterGroup(root *routerGroup, method MethodType) {
-	if len(root.handleMethodFuncMap[method]) == 0 {
-		root.handleMethodFuncMap[method] = map[string]HandleFunc{}
+func initRouterGroup(root *routerGroup, name string) {
+	if root.handleFuncMap[name] == nil {
+		root.handleFuncMap[name] = make(MethodHandleMap, 0)
 	}
+	root.treeNode.Put(name)
 }
