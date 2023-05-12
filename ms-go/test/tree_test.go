@@ -1,12 +1,13 @@
-package ms_go
+package test
 
 import (
 	"fmt"
+	"github.com/gaolaoge/ms-go"
 	"testing"
 )
 
 func TestTreeNode(t *testing.T) {
-	root := &treeNode{name: "/", children: make([]*treeNode, 0)}
+	root := &ms_go.treeNode{name: "/", children: make([]*ms_go.treeNode, 0)}
 
 	root.Put("/user/create/:name")
 	root.Put("/user/detail/:id")

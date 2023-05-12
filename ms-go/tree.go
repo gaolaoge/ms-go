@@ -2,6 +2,10 @@ package ms_go
 
 import "strings"
 
+/*
+	treeNode 用于支持动态路由，提供追加和按条件查询「路由」的功能，
+*/
+
 type treeNode struct {
 	name       string
 	children   []*treeNode
