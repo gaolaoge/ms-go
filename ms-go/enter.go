@@ -3,6 +3,9 @@ package ms_go
 import (
 	"fmt"
 	"net/http"
+	"text/template"
+
+	"github.com/gaolaoge/ms-go/render"
 )
 
 func execute(pkg *HandlePkg, ctx *Context, root *routerGroup) {
@@ -23,13 +26,24 @@ func execute(pkg *HandlePkg, ctx *Context, root *routerGroup) {
 
 type Engine struct {
 	router
+	funcMap    template.FuncMap
+	HTMLRender *render.HTMLRender
+}
+
+func (e *Engine) SetTemplate(funcMap template.FuncMap) {
+	e.funcMap = funcMap
+}
+
+func (e *Engine) LoadTemplate(pattern string) {
+	template := template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
+	e.HTMLRender.Template = template
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 步骤：
 	// 1. 遍历 groups 匹配 treeNode
 	// 2. 在 methodMap 中匹配 method
-	ctx := &Context{w, r}
+	ctx := &Context{w, r, e}
 	for _, group := range e.routerGroups {
 		node := group.treeNode.Get(r.RequestURI)
 		if node != nil {
@@ -62,5 +76,6 @@ func New() *Engine {
 				treeNode:      &treeNode{name: "/", children: make([]*treeNode, 0)},
 			}},
 		},
+		nil, &render.HTMLRender{},
 	}
 }

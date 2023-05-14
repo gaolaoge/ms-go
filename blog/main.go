@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+
 	msgo "github.com/gaolaoge/ms-go"
 )
 
@@ -59,6 +61,63 @@ func main() {
 		id := ctx.R.PostFormValue("id")
 		fmt.Println("id: ", id)
 		fmt.Fprintf(ctx.W, id)
+	})
+
+	v2 := engine.Group("/file")
+	v2.Get("/html", func(c *msgo.Context) {
+		c.HTML(200, "<h1>gaoge2</h1>")
+	})
+
+	type User struct {
+		Name string
+		Age  int
+	}
+
+	v2.Get("/htmlTemp", func(c *msgo.Context) {
+		_ = c.HTMLTemplate("index.html", User{"gaoge", 18}, "tpl/index.html", "tpl/header.html")
+	})
+
+	v2.Get("/htmlTempGlob", func(c *msgo.Context) {
+		_ = c.HTMLTemplateGlob("index.html", User{"gaoge", 28}, "tpl/*.html")
+	})
+
+	engine.LoadTemplate("tpl/*.html")
+	v2.Get("/template", func(c *msgo.Context) {
+		_ = c.Template("index.html", User{"gaoge", 1228})
+	})
+
+	v2.Get("/json", func(c *msgo.Context) {
+		data := User{"gaoge", 20}
+		c.JSON(200, data)
+	})
+
+	v2.Get("/xml", func(c *msgo.Context) {
+		data := User{"gaoge", 20}
+		c.XML(200, data)
+	})
+
+	v2.Get("/excel", func(c *msgo.Context) {
+		c.File("tpl/test.xlsx")
+	})
+
+	v2.Get("/excelName", func(c *msgo.Context) {
+		c.FileAttachment("tpl/test.xlsx", "demo.xlsx")
+	})
+
+	v2.Get("/jpeg", func(c *msgo.Context) {
+		c.FileAttachment("tpl/xiaoliuya.jpeg", "demo.jpeg")
+	})
+
+	v2.Get("/fs", func(c *msgo.Context) {
+		c.FileFromFS("xiaoliuya.jpeg", http.Dir("tpl"))
+	})
+
+	v2.Get("/redirect", func(c *msgo.Context) {
+		c.Redirect("/hello")
+	})
+
+	v2.Get("/string", func(c *msgo.Context) {
+		c.String(http.StatusOK, "和 %s 一起 %s 。\n", "asx", "xs")
 	})
 
 	engine.Run()

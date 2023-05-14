@@ -1,6 +1,10 @@
 package utils
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+	"unsafe"
+)
 
 func Slice_find(slice []any, val any) {
 	switch val.(type) {
@@ -24,4 +28,24 @@ func SubStringLast(str string, substr string) string {
 	} else {
 		return str[index+len(substr):]
 	}
+}
+
+func IsASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+func StringToBytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(
+		&struct {
+			string
+			Cap int
+		}{
+			s,
+			len(s),
+		}))
 }
