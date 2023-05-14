@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	msgo "github.com/gaolaoge/ms-go"
 )
@@ -113,11 +114,22 @@ func main() {
 	})
 
 	v2.Get("/redirect", func(c *msgo.Context) {
-		c.Redirect("/hello")
+		c.Redirect(200, "/hello")
 	})
 
 	v2.Get("/string", func(c *msgo.Context) {
 		c.String(http.StatusOK, "和 %s 一起 %s 。\n", "asx", "xs")
+	})
+
+	v3 := engine.Group("/params")
+	v3.Get("/getQuery", func(c *msgo.Context) {
+		name := c.GetQuery("name")
+		c.HTML(http.StatusOK, name)
+	})
+
+	v3.Get("/getQuerys", func(c *msgo.Context) {
+		name, _ := c.GetQueryArray("name")
+		c.HTML(http.StatusOK, strings.Join(name, ","))
 	})
 
 	engine.Run()

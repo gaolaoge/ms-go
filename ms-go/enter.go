@@ -3,6 +3,7 @@ package ms_go
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"text/template"
 
 	"github.com/gaolaoge/ms-go/render"
@@ -28,6 +29,7 @@ type Engine struct {
 	router
 	funcMap    template.FuncMap
 	HTMLRender *render.HTMLRender
+	pool       sync.Pool
 }
 
 func (e *Engine) SetTemplate(funcMap template.FuncMap) {
@@ -39,13 +41,21 @@ func (e *Engine) LoadTemplate(pattern string) {
 	e.HTMLRender.Template = template
 }
 
+func (e *Engine) allocateContext() any {
+	return &Context{engine: e}
+}
+
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 步骤：
 	// 1. 遍历 groups 匹配 treeNode
 	// 2. 在 methodMap 中匹配 method
-	ctx := &Context{w, r, e}
+	ctx := e.pool.Get().(*Context)
+	ctx.R = r
+	ctx.W = w
+	e.pool.Put(ctx)
+
 	for _, group := range e.routerGroups {
-		node := group.treeNode.Get(r.RequestURI)
+		node := group.treeNode.Get(r.URL.Path)
 		if node != nil {
 			resultMap := group.handleFuncMap[node.routerName]
 			if _, ok := resultMap[ANY]; ok {
@@ -68,14 +78,18 @@ func (e *Engine) Run() {
 }
 
 func New() *Engine {
-	return &Engine{
-		router{
+	engine := &Engine{
+		router: router{
 			routerGroups: []*routerGroup{{
 				name:          "default",
 				handleFuncMap: make(HandleFuncMap),
 				treeNode:      &treeNode{name: "/", children: make([]*treeNode, 0)},
 			}},
 		},
-		nil, &render.HTMLRender{},
+		HTMLRender: &render.HTMLRender{},
 	}
+	engine.pool.New = func() any {
+		return engine.allocateContext()
+	}
+	return engine
 }

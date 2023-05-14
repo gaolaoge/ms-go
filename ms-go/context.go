@@ -1,6 +1,8 @@
 package ms_go
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"text/template"
@@ -10,10 +12,61 @@ import (
 	utils "github.com/gaolaoge/ms-go/utils"
 )
 
+const defaultMaxMemory = 32 << 20
+
 type Context struct {
-	W      http.ResponseWriter
-	R      *http.Request
-	engine *Engine
+	W          http.ResponseWriter
+	R          *http.Request
+	engine     *Engine
+	queryCache url.Values
+	formCache  url.Values
+}
+
+func (c Context) GetQuery(key string) string {
+	c.initQueryCache()
+	return c.queryCache.Get(key)
+}
+
+func (c Context) GetQueryArray(key string) ([]string, bool) {
+	c.initQueryCache()
+	values, ok := c.queryCache[key]
+	return values, ok
+}
+
+func (c Context) GetDefaultQuery(key, defaultValue string) string {
+	val, ok := c.GetQueryArray(key)
+	if ok {
+		return val[0]
+	}
+	return defaultValue
+}
+
+func (c *Context) initQueryCache() {
+	if c.R != nil {
+		c.queryCache = c.R.URL.Query()
+	} else {
+		c.queryCache = url.Values{}
+	}
+}
+
+func (c Context) GetPostFormArray(key string) ([]string, bool) {
+	c.initPostFormCache()
+	values, ok := c.formCache[key]
+	return values, ok
+}
+
+func (c Context) initPostFormCache() {
+	if c.R != nil {
+		if err := c.R.ParseMultipartForm(defaultMaxMemory); err != nil {
+			if !errors.Is(err, http.ErrNotMultipart) {
+				log.Println(err)
+			}
+			c.formCache = c.R.PostForm
+		}
+	} else {
+		c.formCache = url.Values{}
+	}
+
 }
 
 func (c *Context) HTML(status int, html string) error {
@@ -98,7 +151,9 @@ func (c *Context) String(status int, format string, values ...any) error {
 }
 
 func (c Context) Render(statusCode int, r render.Render) error {
-	c.W.WriteHeader(statusCode)
+	if statusCode != http.StatusOK {
+		c.W.WriteHeader(statusCode)
+	}
 	err := r.Render(c.W)
 	return err
 }
