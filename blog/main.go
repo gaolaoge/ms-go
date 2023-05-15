@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -70,8 +71,8 @@ func main() {
 	})
 
 	type User struct {
-		Name string
-		Age  int
+		Name string `json:"name"`
+		Age  int    `json:"age"`
 	}
 
 	v2.Get("/htmlTemp", func(c *msgo.Context) {
@@ -147,7 +148,18 @@ func main() {
 			ctx.SaveUploadFile(file, "./upload/"+file.Filename)
 		}
 		ctx.W.Write([]byte("success"))
+	})
 
+	v3.Post("/postJson", func(ctx *msgo.Context) {
+		user := &User{}
+		ctx.DisallowUnknownFields = true
+		ctx.IsValidate = true
+		err := ctx.DealJson(user)
+		if err != nil {
+			log.Println(err)
+		} else {
+			ctx.JSON(http.StatusOK, user)
+		}
 	})
 
 	engine.Run()

@@ -1,13 +1,16 @@
 package ms_go
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"text/template"
 
 	"github.com/gaolaoge/ms-go/render"
@@ -18,11 +21,37 @@ import (
 const defaultMultipartMemory = 32 << 20
 
 type Context struct {
-	W          http.ResponseWriter
-	R          *http.Request
-	engine     *Engine
-	queryCache url.Values
-	formCache  url.Values
+	W                     http.ResponseWriter
+	R                     *http.Request
+	engine                *Engine
+	queryCache            url.Values
+	formCache             url.Values
+	DisallowUnknownFields bool
+	IsValidate            bool
+}
+
+func (c Context) DealJson(obj any) error {
+	// 判断实体值类型，若不为指针则直接报错
+	valueOf := reflect.ValueOf(obj)
+	if valueOf.Kind() != reflect.Pointer {
+		return errors.New("this argument must have a pointer type")
+	}
+	// post 的参数内容在 body 中
+	body := c.R.Body
+	if body == nil {
+		return errors.New("invalid request")
+	}
+	decoder := json.NewDecoder(body)
+	if c.DisallowUnknownFields {
+		decoder.DisallowUnknownFields() // 校验参数，若存在未知参数即报错
+	}
+	if c.IsValidate {
+		err := validateRequireParam(obj, decoder) // 校验参数，若缺少定义参数即报错
+		if err != nil {
+			return err
+		}
+	}
+	return decoder.Decode(obj)
 }
 
 func (c *Context) FormFile(name string) *multipart.FileHeader {
@@ -207,4 +236,30 @@ func (c *Context) Render(statusCode int, r render.Render) error {
 	}
 	err := r.Render(c.W)
 	return err
+}
+
+func validateRequireParam(data any, decoder *json.Decoder) error {
+	if data == nil {
+		return nil
+	}
+	valueOf := reflect.ValueOf(data)
+	t := valueOf.Elem().Interface()
+	of := reflect.ValueOf(t)
+	switch of.Kind() {
+	case reflect.Struct:
+		mapData := make(map[string]interface{})
+		_ = decoder.Decode(&mapData)
+		for i := 0; i < of.NumField(); i++ {
+			field := of.Type().Field(i)
+			tag := field.Tag.Get("json")
+			value := mapData[tag]
+			if value == nil {
+				return errors.New(fmt.Sprintf("filed [%s] is not exist", tag))
+			}
+		}
+		marshal, _ := json.Marshal(mapData)
+		_ = json.Unmarshal(marshal, data)
+	}
+
+	return nil
 }
