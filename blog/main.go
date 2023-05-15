@@ -132,6 +132,24 @@ func main() {
 		c.HTML(http.StatusOK, strings.Join(name, ","))
 	})
 
+	v3.Post("/file", func(ctx *msgo.Context) {
+		//file := ctx.FormFile("file")
+		//ctx.SaveUploadFile(file, "./upload/"+file.Filename)
+		form, _ := ctx.MultipartForm()
+		fmt.Println(form)
+		ctx.W.Write([]byte("success"))
+
+	})
+
+	v3.Post("/files", func(ctx *msgo.Context) {
+		files, _ := ctx.FormFiles("img")
+		for _, file := range files {
+			ctx.SaveUploadFile(file, "./upload/"+file.Filename)
+		}
+		ctx.W.Write([]byte("success"))
+
+	})
+
 	engine.Run()
 	fmt.Println("next")
 }
