@@ -31,8 +31,8 @@ type Context struct {
 }
 
 func (c Context) DealJson(obj any) error {
-	// 判断实体值类型，若不为指针则直接报错
 	valueOf := reflect.ValueOf(obj)
+	// 判断实体值类型，若不为指针则直接报错
 	if valueOf.Kind() != reflect.Pointer {
 		return errors.New("this argument must have a pointer type")
 	}
@@ -46,12 +46,15 @@ func (c Context) DealJson(obj any) error {
 		decoder.DisallowUnknownFields() // 校验参数，若存在未知参数即报错
 	}
 	if c.IsValidate {
+		// 解析动作放在 validateRequireParam 内
 		err := validateRequireParam(obj, decoder) // 校验参数，若缺少定义参数即报错
 		if err != nil {
 			return err
 		}
+		return nil
+	} else {
+		return decoder.Decode(obj)
 	}
-	return decoder.Decode(obj)
 }
 
 func (c *Context) FormFile(name string) *multipart.FileHeader {
@@ -242,9 +245,18 @@ func validateRequireParam(data any, decoder *json.Decoder) error {
 	if data == nil {
 		return nil
 	}
+	// 首先将结构体解析为map ，然后对比其 key
+	// 需判断其为 结构体，才能对其转换为 map
+	// 1. 通过指针（实参）获取实例
 	valueOf := reflect.ValueOf(data)
+	// 2. 实例，再得到实例的结构体
 	t := valueOf.Elem().Interface()
 	of := reflect.ValueOf(t)
+
+	v1 := reflect.ValueOf(data).Elem()
+	v2 := reflect.TypeOf(data).Elem()
+	fmt.Println(v1, v2)
+
 	switch of.Kind() {
 	case reflect.Struct:
 		mapData := make(map[string]interface{})
