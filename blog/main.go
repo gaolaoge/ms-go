@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"reflect"
 	"strings"
 
 	msgo "github.com/gaolaoge/ms-go"
@@ -167,49 +166,6 @@ func main() {
 	fmt.Println("next")
 }
 
-type User struct {
-	Name    string
-	Age     int
-	Married bool
-}
-
-func InspectStruct(u interface{}) {
-	v := reflect.ValueOf(u)
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Field(i)
-		switch field.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			fmt.Printf("field:%d key:%s type:%s value:%d\n", i, field, field.Type().Name(), field.Int())
-
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			fmt.Printf("field:%d type:%s value:%d\n", i, field.Type().Name(), field.Uint())
-
-		case reflect.Bool:
-			fmt.Printf("field:%d type:%s value:%t\n", i, field.Type().Name(), field.Bool())
-
-		case reflect.String:
-			fmt.Printf("field:%d type:%s value:%q\n", i, field.Type().Name(), field.String())
-
-		default:
-			fmt.Printf("field:%d unhandled kind:%s\n", i, field.Kind())
-		}
-	}
-}
-
-/*
-field:0 type:string value:"dj"
-field:1 type:int value:18
-field:2 type:bool value:true
-*/
-
 func init() {
-	//u := User{
-	//	Name:    "dj",
-	//	Age:     18,
-	//	Married: true,
-	//}
-	//InspectStruct(u)
-	//InspectStruct(bytes.Buffer{})
-	//fmt.Println(reflect.ValueOf(u).Elem().Interface())
 
 }
