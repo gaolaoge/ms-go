@@ -28,6 +28,7 @@ type Context struct {
 	formCache             url.Values
 	DisallowUnknownFields bool
 	IsValidate            bool
+	StatusCode            int
 }
 
 func (c Context) BindJson(obj any) error {
@@ -231,9 +232,11 @@ func (c *Context) String(status int, format string, values ...any) error {
 }
 
 func (c *Context) Render(statusCode int, r render.Render) error {
+	c.StatusCode = statusCode
 	if statusCode != http.StatusOK {
 		c.W.WriteHeader(statusCode)
 	}
 	err := r.Render(c.W)
+	fmt.Println("StatusCode: ", c.StatusCode)
 	return err
 }

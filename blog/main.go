@@ -26,6 +26,8 @@ func main() {
 
 	v1 := engine.Group("/v1")
 
+	v1.Use(msgo.Logging)
+
 	v1.Use(func(next msgo.HandleFunc) msgo.HandleFunc {
 		return func(ctx *msgo.Context) {
 			fmt.Println("middle pre")
