@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
@@ -125,6 +124,8 @@ func main() {
 	})
 
 	v3 := engine.Group("/params")
+	v3.Use(msgo.Logging)
+
 	v3.Get("/getQuery", func(c *msgo.Context) {
 		name := c.GetQuery("name")
 		c.HTML(http.StatusOK, name)
@@ -150,18 +151,6 @@ func main() {
 			ctx.SaveUploadFile(file, "./upload/"+file.Filename)
 		}
 		ctx.W.Write([]byte("success"))
-	})
-
-	v3.Post("/postJson", func(ctx *msgo.Context) {
-		user := &User{}
-		ctx.DisallowUnknownFields = true
-		ctx.IsValidate = true
-		err := ctx.DealJson(user)
-		if err != nil {
-			log.Println(err)
-		} else {
-			ctx.JSON(http.StatusOK, user)
-		}
 	})
 
 	engine.Run()

@@ -237,6 +237,5 @@ func (c *Context) Render(statusCode int, r render.Render) error {
 		c.W.WriteHeader(statusCode)
 	}
 	err := r.Render(c.W)
-	fmt.Println("StatusCode: ", c.StatusCode)
 	return err
 }
