@@ -1,0 +1,8 @@
+[33m[msgo][0m [34m2023-05-28 02:01:16.985[0m | level=[32mINFO[0m | msg=[32m"hello Info"[0m name=gaoge age=18  
+[33m[msgo][0m [34m2023-05-28 02:01:16.985[0m | level=[31mERROR[0m | msg=[31m"hello Error"[0m  
+[msgo] 2023-05-28 02:03:12.387 | level=INFO | msg="hello Info" name=gaoge age=18  
+[msgo] 2023-05-28 02:03:12.387 | level=ERROR | msg="hello Error"  
+[33m[msgo][0m [34m2023-05-28 02:05:01.008[0m | level=[32mINFO[0m | msg=[32m"hello Info"[0m age=18 name=gaoge  
+[33m[msgo][0m [34m2023-05-28 02:05:01.008[0m | level=[31mERROR[0m | msg=[31m"hello Error"[0m  
+[msgo] 2023-05-28 02:05:52.935 | level=INFO | msg="hello Info" name=gaoge age=18  
+[msgo] 2023-05-28 02:05:52.935 | level=ERROR | msg="hello Error"  

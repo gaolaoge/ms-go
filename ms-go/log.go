@@ -13,6 +13,8 @@ import (
 /*
 go 标准日志库足以提供日常功能，这里只做1些优化，如添加颜色， 做日志分级。
 日志中间件，用于打印一些请求信息，
+
+对日志做分级处理，并将其存放到不同位置，这样更便于查看。
 */
 
 const (
@@ -108,6 +110,7 @@ var defaultFormatter = func(params *LogFormatterParams) string {
 func LoggingWithConfig(conf LoggingConfig, next HandleFunc) HandleFunc {
 	foramtter := conf.Formatter
 	out := conf.out
+	displayColor := false // 默认为false，只有识别为控制台输出时才为true
 
 	if foramtter == nil {
 		foramtter = defaultFormatter
@@ -115,6 +118,7 @@ func LoggingWithConfig(conf LoggingConfig, next HandleFunc) HandleFunc {
 
 	if out == nil {
 		out = DefaultWriter
+		displayColor = true
 	}
 
 	return func(ctx *Context) {
@@ -142,7 +146,7 @@ func LoggingWithConfig(conf LoggingConfig, next HandleFunc) HandleFunc {
 			ClientIP:       net.ParseIP(ip),
 			Method:         ctx.R.Method,
 			Path:           path,
-			IsDisplayColor: true,
+			IsDisplayColor: displayColor,
 		}
 		fmt.Fprintf(out, foramtter(params))
 	}

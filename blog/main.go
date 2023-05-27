@@ -6,12 +6,21 @@ import (
 	"strings"
 
 	msgo "github.com/gaolaoge/ms-go"
+	msLog "github.com/gaolaoge/ms-go/log"
 )
 
 func main() {
 	engine := msgo.New()
+	//logger := msLog.New()
+	logger := msLog.Default()
+	logger.Level = msLog.LevelInfo
 
 	engine.Add("/hello", func(ctx *msgo.Context) {
+		logger.Outs = append(logger.Outs, msLog.FileWriter("./log/log.log"))
+		logger.WithFields(map[string]any{"name": "gaoge", "age": 18}).Info("hello Info")
+		logger.Debug("hello Debug")
+		logger.Error("hello Error")
+
 		fmt.Fprintf(ctx.W, "hello world")
 	})
 
