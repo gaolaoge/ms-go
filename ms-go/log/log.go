@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"time"
 )
 
@@ -33,6 +34,11 @@ const (
 	LevelDebug LoggerLevel = iota
 	LevelInfo
 	LevelError
+	LevelFatal
+	LevelPanic
+	LevelOff
+	LevelNone
+	LevelAll
 )
 
 func (l LoggerLevel) Level() string {
@@ -43,6 +49,8 @@ func (l LoggerLevel) Level() string {
 		return "INFO"
 	case LevelError:
 		return "ERROR"
+	case LevelAll:
+		return "ALL"
 	default:
 		return "UNKNOWN"
 	}
@@ -93,11 +101,17 @@ func (f *LoggerFormatter) format(msg any) string {
 	)
 }
 
+type LoggerWriter struct {
+	Level LoggerLevel
+	Out   io.Writer
+}
+
 type Logger struct {
 	Formatter    LoggingFormatter
 	Level        LoggerLevel
-	Outs         []io.Writer
+	Outs         []*LoggerWriter
 	LoggerFields Fields
+	logPath      string
 }
 
 func (l Logger) Info(content string) {
@@ -135,14 +149,25 @@ func (l Logger) Print(level LoggerLevel, content string) {
 	}
 	var str string
 	for _, out := range l.Outs {
-		if out == os.Stdout {
+		if out.Out == os.Stdout {
 			params.IsColor = true
-		} else {
-			params.IsColor = false
+			str = l.Formatter.Format(params)
+			fmt.Fprintf(out.Out, str)
 		}
-		str = l.Formatter.Format(params)
-		fmt.Fprintf(out, str)
+		if out.Level == LevelAll || out.Level == level {
+			params.IsColor = false
+			str = l.Formatter.Format(params)
+			fmt.Fprintf(out.Out, str)
+		}
 	}
+}
+
+func (l *Logger) SetLogPath(logPath string) {
+	l.logPath = logPath
+	l.Outs = append(l.Outs, &LoggerWriter{Level: LevelAll, Out: FileWriter(path.Join(logPath, "all.log"))})
+	l.Outs = append(l.Outs, &LoggerWriter{Level: LevelDebug, Out: FileWriter(path.Join(logPath, "debug.log"))})
+	l.Outs = append(l.Outs, &LoggerWriter{Level: LevelInfo, Out: FileWriter(path.Join(logPath, "info.log"))})
+	l.Outs = append(l.Outs, &LoggerWriter{Level: LevelError, Out: FileWriter(path.Join(logPath, "error.log"))})
 }
 
 func New() *Logger {
@@ -151,10 +176,15 @@ func New() *Logger {
 
 // Default 默认配置
 func Default() *Logger {
+	w := &LoggerWriter{
+		Level: LevelDebug,
+		Out:   os.Stdout,
+	}
+
 	logger := &Logger{
 		Formatter: &TextFormatter{},
 		Level:     LevelDebug,
-		Outs:      []io.Writer{os.Stdout},
+		Outs:      []*LoggerWriter{w},
 	}
 	return logger
 }

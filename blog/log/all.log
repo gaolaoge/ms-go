@@ -1,0 +1,3 @@
+[msgo] 2023-05-28 20:30:01.251 | level=INFO | msg="hello Info" name=gaoge age=18  
+[msgo] 2023-05-28 20:30:01.251 | level=DEBUG | msg="hello Debug"  
+[msgo] 2023-05-28 20:30:01.251 | level=ERROR | msg="hello Error"  
