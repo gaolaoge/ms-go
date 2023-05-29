@@ -157,9 +157,14 @@ func (l Logger) Print(level LoggerLevel, content string) {
 		if out.Level == LevelAll || out.Level == level {
 			params.IsColor = false
 			str = l.Formatter.Format(params)
+			l.CheckFileSize(out)
 			fmt.Fprintf(out.Out, str)
 		}
 	}
+}
+
+func (l *Logger) CheckFileSize(w *LoggerWriter) {
+	// 判断文件大小
 }
 
 func (l *Logger) SetLogPath(logPath string) {
