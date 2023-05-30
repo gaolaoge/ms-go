@@ -27,13 +27,16 @@ var (
 type sig struct{}
 
 type Pool struct {
-	cap     int32         // 容量
-	running int32         // 正在运行中的 worker 数量
-	workers []*Worker     // 若干空闲 worker
-	expire  time.Duration // 过期时间，规定 worker 的空闲时间超过此值就回收掉
-	release chan sig      // 释放资源信号，接收到它表示pool不再使用
-	lock    sync.Mutex    // 用以保护 pool 里面的相关资源的安全
-	once    sync.Once     // 标记释放动作只能调用一次
+	cap          int32         // 容量
+	running      int32         // 正在运行中的 worker 数量
+	workers      []*Worker     // 若干空闲 worker
+	expire       time.Duration // 过期时间，规定 worker 的空闲时间超过此值就回收掉
+	release      chan sig      // 释放资源信号，接收到它表示pool不再使用
+	lock         sync.Mutex    // 用以保护 pool 里面的相关资源的安全
+	once         sync.Once     // 标记释放动作只能调用一次
+	workerCache  sync.Pool     // 缓存
+	cond         *sync.Cond
+	PanicHandler func(err any)
 }
 
 // Submit 获取池中 worker 并执行任务
@@ -64,28 +67,38 @@ func (p *Pool) GetWorker() *Worker {
 	// 3. 若没有空闲 worker，判断是否可以创建新 worker
 	if p.running < p.cap {
 		// 4. 若 cap 大于所有正在运行 workers 长度，表示可以创建
-		w := &Worker{
-			pool: p,
-			task: make(chan func(), 1),
+		var w *Worker
+		c := p.workerCache.Get()
+		if c == nil {
+			w = &Worker{
+				pool: p,
+				task: make(chan func(), 1),
+			}
+		} else {
+			w = c.(*Worker)
 		}
+
 		w.run()
 		return w
 	}
 	// 5. 若 cap 已经等于所有正在运行 workers 长度，则只能堵塞等待
-	for {
-		p.lock.Lock()
-		idleWorkers := p.workers
-		n := len(idleWorkers)
-		if n == 0 {
-			p.lock.Unlock()
-			continue
-		}
-		w := idleWorkers[n-1]
-		idleWorkers[n-1] = nil
-		p.workers = idleWorkers[:n-1]
+	return p.waitIdleWorker()
+}
+
+func (p *Pool) waitIdleWorker() *Worker {
+	p.lock.Lock()
+	p.cond.Wait()
+	idleWorkers := p.workers
+	n := len(idleWorkers)
+	if n == 0 {
 		p.lock.Unlock()
-		return w
+		return p.waitIdleWorker()
 	}
+	w := idleWorkers[n-1]
+	idleWorkers[n-1] = nil
+	p.workers = idleWorkers[:n-1]
+	p.lock.Unlock()
+	return w
 }
 
 func (p *Pool) incRunning() {
@@ -96,6 +109,7 @@ func (p *Pool) PutWorker(w *Worker) {
 	w.lastTime = time.Now()
 	p.lock.Lock()
 	p.workers = append(p.workers, w)
+	p.cond.Signal()
 	p.lock.Unlock()
 }
 
@@ -176,6 +190,15 @@ func NewTimePool(cap int, expire int) (*Pool, error) {
 		expire:  time.Duration(expire) * time.Second,
 		release: make(chan sig, 1),
 	}
+
+	p.workerCache.New = func() any {
+		return &Worker{
+			pool: p,
+			task: make(chan func(), 1),
+		}
+	}
+
+	p.cond = sync.NewCond(&p.lock)
 
 	go p.expireWorker()
 

@@ -1,6 +1,8 @@
 package pool
 
-import "time"
+import (
+	"time"
+)
 
 type Worker struct {
 	pool     *Pool
@@ -13,13 +15,24 @@ func (w *Worker) run() {
 }
 
 func (w *Worker) running() {
-	for f := range w.task {
-		if f == nil {
-			return
-		}
-		f()
+	defer func() {
 		// 任务执行完成，偿还 worker
 		w.pool.PutWorker(w)
 		w.pool.decRunning()
+
+		if err := recover(); err != nil {
+			if w.pool.PanicHandler != nil {
+				w.pool.PanicHandler(err)
+			} else {
+				// TODO 默认错误处理
+			}
+		}
+	}()
+	for f := range w.task {
+		if f == nil {
+			w.pool.workerCache.Put(w)
+			return
+		}
+		f()
 	}
 }
