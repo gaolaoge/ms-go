@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	return
 	engine := msgo.New()
 	//logger := msLog.New()
 	logger := msLog.Default()
