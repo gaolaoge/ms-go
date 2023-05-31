@@ -44,6 +44,7 @@ func (rg *routerGroup) Post(name string, handleFunc HandleFunc, middlewareFunc .
 
 type router struct {
 	routerGroups []*routerGroup
+	engine       *Engine
 }
 
 func (r *router) Group(name string) *routerGroup {

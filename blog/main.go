@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	msgo "github.com/gaolaoge/ms-go"
+	msConfig "github.com/gaolaoge/ms-go/config"
 	msLog "github.com/gaolaoge/ms-go/log"
 )
 
@@ -169,5 +170,5 @@ func main() {
 }
 
 func init() {
-
+	fmt.Println(msConfig.Config{})
 }

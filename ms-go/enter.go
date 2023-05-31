@@ -6,6 +6,10 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/gaolaoge/ms-go/config"
+
+	msLog "github.com/gaolaoge/ms-go/log"
+
 	"github.com/gaolaoge/ms-go/render"
 )
 
@@ -30,6 +34,7 @@ type Engine struct {
 	funcMap    template.FuncMap
 	HTMLRender *render.HTMLRender
 	pool       sync.Pool
+	Logger     *msLog.Logger
 }
 
 func (e *Engine) SetTemplate(funcMap template.FuncMap) {
@@ -77,6 +82,11 @@ func (e *Engine) Run() {
 	http.ListenAndServe(":8081", nil)
 }
 
+// Use TODO
+func (e *Engine) Use() {
+
+}
+
 func New() *Engine {
 	engine := &Engine{
 		router: router{
@@ -91,5 +101,20 @@ func New() *Engine {
 	engine.pool.New = func() any {
 		return engine.allocateContext()
 	}
+	return engine
+}
+
+func Default() *Engine {
+	engine := New()
+	engine.Logger = msLog.Default()
+
+	logPath, ok := config.Conf.Log["path"]
+	if ok {
+		engine.Logger.SetLogPath(logPath.(string))
+	}
+
+	//engine.Use(Logging, recovery)
+	engine.router.engine = engine
+
 	return engine
 }
