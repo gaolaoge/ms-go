@@ -63,6 +63,7 @@ func (s *MsSession) Table(name string) *MsSession {
 }
 
 func (s *MsSession) Insert(data any) (int64, int64, error) {
+	// insert into table (xxx,xxx) values (?,?)
 	// 这里保证每个 session 都是一个独立的不受影响的操作
 	s.fieldNames(data)
 	query := fmt.Sprintf(
@@ -74,6 +75,49 @@ func (s *MsSession) Insert(data any) (int64, int64, error) {
 	s.db.Logger.Info(query)
 
 	stmt, err := s.db.db.Prepare(query)
+	if err != nil {
+		return -1, -1, err
+	}
+
+	r, err := stmt.Exec(s.values...)
+	if err != nil {
+		return -1, -1, err
+	}
+
+	id, err := r.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	affected, err := r.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	return id, affected, nil
+}
+
+func (s MsSession) InsertBatch(data []any) (int64, int64, error) {
+	if len(data) == 0 {
+		return -1, -1, errors.New("no data insert")
+	}
+	s.fieldNames(data[0])
+	query := fmt.Sprintf("insert into %s (%s) values ", s.tableName, strings.Join(s.fieldName, ","))
+
+	var sb strings.Builder
+	sb.WriteString(query)
+	for index, _ := range data {
+		sb.WriteString("(")
+		sb.WriteString(strings.Join(s.placeHolder, ","))
+		sb.WriteString(")")
+		if index < len(data)-1 {
+			sb.WriteString(",")
+		}
+	}
+	s.batchValues(data)
+	s.db.Logger.Info(sb.String())
+
+	stmt, err := s.db.db.Prepare(sb.String())
 	if err != nil {
 		return -1, -1, err
 	}
@@ -132,6 +176,39 @@ func (s *MsSession) fieldNames(data any) {
 		s.fieldName = append(s.fieldName, sqlTag)
 		s.placeHolder = append(s.placeHolder, "?")
 		s.values = append(s.values, vVar, vVar.Field(i).Interface())
+	}
+}
+
+func (s *MsSession) batchValues(data []any) {
+	s.values = make([]any, 0)
+
+	for _, val := range data {
+		t := reflect.TypeOf(val)
+		v := reflect.ValueOf(val)
+		if t.Kind() != reflect.Pointer {
+			panic("data mast be pointer")
+		}
+
+		tVar := t.Elem()
+		vVar := v.Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := t.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("orm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, "auto_increment") {
+					// 主键id 自增长
+					continue
+				}
+			}
+			id := vVar.Field(i).Interface()
+			if strings.ToLower(sqlTag) == "id" && IsAutoId(id) {
+				continue
+			}
+			s.values = append(s.values, vVar.Field(i).Interface())
+		}
 	}
 }
 
