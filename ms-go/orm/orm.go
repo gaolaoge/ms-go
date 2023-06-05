@@ -55,6 +55,9 @@ type MsSession struct {
 	fieldName   []string
 	placeHolder []string
 	values      []any
+	updateParam strings.Builder
+	whereParam  strings.Builder
+	whereValues []any
 }
 
 func (s *MsSession) Table(name string) *MsSession {
@@ -210,6 +213,70 @@ func (s *MsSession) batchValues(data []any) {
 			s.values = append(s.values, vVar.Field(i).Interface())
 		}
 	}
+}
+
+func (s MsSession) Update(data ...any) (int64, int64, error) {
+	// Update("age", 1) or Update(&user) 都支持
+	if len(data) == 0 || len(data) >= 2 {
+		return -1, -1, errors.New("param not valid")
+	}
+
+	single := false
+	if len(data) == 1 {
+		single = true
+	}
+
+	// update table set age=?,name=? where id=?
+	if !single {
+		if s.updateParam.String() != "" {
+			s.updateParam.WriteString(",")
+		}
+		s.updateParam.WriteString(data[0].(string))
+		s.updateParam.WriteString("=?")
+		s.values = append(s.values, data[1])
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s", s.tableName, s.updateParam.String())
+
+	var sb strings.Builder
+	sb.WriteString(query)
+	sb.WriteString(s.whereParam.String())
+
+	s.db.Logger.Info(sb.String())
+
+	stmt, err := s.db.db.Prepare(sb.String())
+	if err != nil {
+		return -1, -1, err
+	}
+
+	s.values = append(s.values, s.whereValues...)
+
+	r, err := stmt.Exec(s.values...)
+	if err != nil {
+		return -1, -1, err
+	}
+	id, err := r.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+	affected, err := r.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	return id, affected, nil
+}
+
+func (s *MsSession) Where(field string, value interface{}) *MsSession {
+	// id=1
+	if s.whereParam.String() == "" {
+		s.whereParam.WriteString("where ")
+	} else {
+		s.whereParam.WriteString(",")
+	}
+	s.whereParam.WriteString(field)
+	s.whereParam.WriteString("=?")
+	s.whereValues = append(s.whereValues, value)
+	return s
 }
 
 func IsAutoId(id any) bool {
