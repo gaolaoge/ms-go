@@ -39,10 +39,23 @@ func (db *MsDb) SetConnMaxIdleTime(t time.Duration) *MsDb {
 	return db
 }
 
-func (db *MsDb) New() *MsSession {
-	return &MsSession{
+func (db *MsDb) New(data interface{}) *MsSession {
+	m := &MsSession{
 		db: db,
 	}
+
+	if data != nil {
+		t := reflect.TypeOf(data)
+		if t.Kind() != reflect.Pointer {
+			panic(errors.New("data must be pointer"))
+		}
+		tVar := t.Elem()
+		if m.tableName == "" {
+			m.tableName = m.db.Prefix + strings.ToLower(Name(tVar.Name()))
+		}
+	}
+
+	return m
 }
 
 func (db MsDb) Close() error {
@@ -215,7 +228,7 @@ func (s *MsSession) batchValues(data []any) {
 	}
 }
 
-func (s MsSession) Update(data ...any) (int64, int64, error) {
+func (s *MsSession) Update(data ...any) (int64, int64, error) {
 	// Update("age", 1) or Update(&user) 都支持
 	if len(data) == 0 || len(data) >= 2 {
 		return -1, -1, errors.New("param not valid")
@@ -234,7 +247,44 @@ func (s MsSession) Update(data ...any) (int64, int64, error) {
 		s.updateParam.WriteString(data[0].(string))
 		s.updateParam.WriteString("=?")
 		s.values = append(s.values, data[1])
+	} else {
+		updateData := data[0]
+		t := reflect.TypeOf(updateData)
+		v := reflect.ValueOf(updateData)
+
+		if t.Kind() != reflect.Pointer {
+			panic(errors.New("updateData mast be pointer"))
+		}
+
+		tVar := t.Elem()
+		vVar := v.Elem()
+		if s.tableName == "" {
+			s.tableName = s.db.Prefix + strings.ToLower(Name(tVar.Name()))
+		}
+
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("orm")
+
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+
+			id := vVar.Field(i).Interface()
+			if strings.ToLower(sqlTag) == "id" && IsAutoId(id) {
+				continue
+			}
+			s.updateParam.WriteString(sqlTag)
+			s.updateParam.WriteString("=?")
+			s.values = append(s.values, vVar.Field(i).Interface())
+		}
 	}
+
 	query := fmt.Sprintf("UPDATE %s SET %s", s.tableName, s.updateParam.String())
 
 	var sb strings.Builder
@@ -266,17 +316,127 @@ func (s MsSession) Update(data ...any) (int64, int64, error) {
 	return id, affected, nil
 }
 
+func (s *MsSession) UpdateParam(field string, value interface{}) *MsSession {
+	if s.whereParam.String() != "" {
+		s.whereParam.WriteString(" , ")
+	}
+	s.whereParam.WriteString(field)
+	s.whereParam.WriteString("=?")
+	s.whereValues = append(s.values, value)
+	return s
+}
+
+func (s *MsSession) UpdateMap(data map[string]any) *MsSession {
+	for k, v := range data {
+		if s.whereParam.String() != "" {
+			s.whereParam.WriteString(" , ")
+		}
+		s.whereParam.WriteString(k)
+		s.whereParam.WriteString("=?")
+		s.whereValues = append(s.values, v)
+	}
+	return s
+}
+
 func (s *MsSession) Where(field string, value interface{}) *MsSession {
 	// id=1
 	if s.whereParam.String() == "" {
 		s.whereParam.WriteString("where ")
 	} else {
-		s.whereParam.WriteString(",")
+		s.whereParam.WriteString(" and ")
 	}
 	s.whereParam.WriteString(field)
 	s.whereParam.WriteString("=?")
 	s.whereValues = append(s.whereValues, value)
 	return s
+}
+
+func (s *MsSession) Or(field string, value interface{}) *MsSession {
+	// id=1
+	if s.whereParam.String() == "" {
+		s.whereParam.WriteString("where ")
+	} else {
+		s.whereParam.WriteString(" or ")
+	}
+	s.whereParam.WriteString(field)
+	s.whereParam.WriteString("=?")
+	s.whereValues = append(s.whereValues, value)
+	return s
+}
+
+func (s *MsSession) SelectOne(data interface{}, fields ...string) error {
+	// select * from table where id=1000
+	t := reflect.TypeOf(data)
+	if t.Kind() != reflect.Pointer {
+		panic(errors.New("data must be pointer"))
+	}
+
+	fieldStr := "*"
+	if len(fields) > 0 {
+		fieldStr = strings.Join(fields, ",")
+	}
+
+	query := fmt.Sprintf("select %s from %s ", fieldStr, s.tableName)
+	var sb strings.Builder
+	sb.WriteString(query)
+	sb.WriteString(s.whereParam.String())
+
+	s.db.Logger.Info(sb.String())
+
+	stmt, err := s.db.db.Prepare(sb.String())
+	if err != nil {
+		return err
+	}
+	rows, err := stmt.Query(s.whereValues...)
+	if err != nil {
+		return err
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]interface{}, len(columns))
+	fieldScan := make([]interface{}, len(columns))
+	for i := range fieldScan {
+		fieldScan[i] = &values[i]
+	}
+
+	if rows.Next() {
+		err := rows.Scan(fieldScan...)
+		if err != nil {
+			return err
+		}
+
+		tVar := t.Elem()
+		vVar := reflect.ValueOf(data).Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("orm")
+
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+
+			for j, colName := range columns {
+				if sqlTag == colName {
+					target := values[j]
+					targetValue := reflect.ValueOf(target)
+					fieldType := tVar.Field(j).Type
+					result := reflect.ValueOf(targetValue.Interface()).Convert(fieldType)
+					vVar.Field(i).Set(result)
+				}
+			}
+
+		}
+	}
+
+	return nil
 }
 
 func IsAutoId(id any) bool {
