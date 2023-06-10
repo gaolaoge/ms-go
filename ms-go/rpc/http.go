@@ -2,10 +2,14 @@ package rpc
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -29,7 +33,11 @@ func NewHttpClient() *MsHttpsClient {
 	return &MsHttpsClient{client: client}
 }
 
-func (c *MsHttpsClient) Get(url string) ([]byte, error) {
+func (c *MsHttpsClient) Get(url string, args map[string]any) ([]byte, error) {
+	// GET 请求参数 url?
+	if args != nil && len(args) > 0 {
+		url = url + "?" + c.toValues(args)
+	}
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -37,7 +45,28 @@ func (c *MsHttpsClient) Get(url string) ([]byte, error) {
 	return c.responseHanlde(request)
 }
 
-func (c *MsHttpsClient) responseHanlde(request *http.Request) ([]byte, error) {
+func (c *MsHttpsClient) PostForm(url string, args map[string]any) ([]byte, error) {
+	request, err := http.NewRequest("POST", url, strings.NewReader(c.toValues(args)))
+	if err != nil {
+		return nil, err
+	}
+	return c.responseHandle(request)
+}
+
+func (c *MsHttpsClient) PostJSON(url string, args map[string]any) ([]byte, error) {
+	marshal, _ := json.Marshal(args)
+	request, err := http.NewRequest("POST", url, bytes.NewReader(marshal))
+	if err != nil {
+		return nil, err
+	}
+	return c.responseHandle(request)
+}
+
+func (c *MsHttpsClient) Response(req *http.Request) ([]byte, error) {
+	return c.responseHandle(req)
+}
+
+func (c *MsHttpsClient) responseHandle(request *http.Request) ([]byte, error) {
 	response, err := c.client.Do(request)
 	if err != nil {
 		return nil, err
@@ -66,4 +95,24 @@ func (c *MsHttpsClient) responseHanlde(request *http.Request) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func (c *MsHttpsClient) toValues(args map[string]any) string {
+	if args == nil || len(args) == 0 {
+		return ""
+	}
+	//var str strings.Builder
+	//for k, v := range args {
+	//	if str.Len() > 0 {
+	//		str.WriteString("&")
+	//	}
+	//	str.WriteString(fmt.Sprintf("%s=%s", k, v))
+	//}
+	//return str.String()
+
+	params := url.Values{}
+	for k, v := range args {
+		params.Set(k, fmt.Sprintf("%v", v))
+	}
+	return params.Encode()
 }

@@ -15,7 +15,7 @@ func main() {
 	group := engine.Group("/order")
 	group.Get("/find", func(ctx *msgo.Context) {
 		// 通过商品中心查询商品的信息
-		body, err := client.Get("http://localhost:9002/goods/find")
+		body, err := client.Get("http://localhost:9002/goods/find", map[string]any{"name": "gaoge", "age": 18})
 		if err != nil {
 			info := fmt.Sprintf("MSRPC_ERROR: %v", err)
 			panic(info)
