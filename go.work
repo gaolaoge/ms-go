@@ -2,5 +2,7 @@ go 1.19
 
 use (
 	./blog
+	./goodscenter
 	./ms-go
+	./ordercenter
 )

@@ -77,9 +77,9 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `%s %s is not found \n`, r.Method, r.RequestURI)
 }
 
-func (e *Engine) Run() {
+func (e *Engine) Run(addr string) {
 	http.Handle("/", e)
-	http.ListenAndServe(":8081", nil)
+	http.ListenAndServe(addr, nil)
 }
 
 // Use TODO
