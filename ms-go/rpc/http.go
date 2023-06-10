@@ -9,12 +9,25 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
 
+const (
+	HTTP  = "http"
+	HTTPS = "https"
+)
+
+const (
+	GET       = "GET"
+	POST_FORM = "Post_form"
+	POST_JSON = "Post_json"
+)
+
 type MsHttpsClient struct {
-	client *http.Client
+	client     *http.Client
+	serviceMap map[string]MsService
 }
 
 func NewHttpClient() *MsHttpsClient {
@@ -30,7 +43,10 @@ func NewHttpClient() *MsHttpsClient {
 		},
 	}
 
-	return &MsHttpsClient{client: client}
+	return &MsHttpsClient{
+		client:     client,
+		serviceMap: make(map[string]MsService),
+	}
 }
 
 func (c *MsHttpsClient) Get(url string, args map[string]any) ([]byte, error) {
@@ -42,7 +58,7 @@ func (c *MsHttpsClient) Get(url string, args map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.responseHanlde(request)
+	return c.responseHandle(request)
 }
 
 func (c *MsHttpsClient) PostForm(url string, args map[string]any) ([]byte, error) {
@@ -79,7 +95,6 @@ func (c *MsHttpsClient) responseHandle(request *http.Request) ([]byte, error) {
 
 	reader := bufio.NewReader(response.Body)
 	defer response.Body.Close()
-
 	buf := make([]byte, 127)
 	var body []byte
 
@@ -115,4 +130,82 @@ func (c *MsHttpsClient) toValues(args map[string]any) string {
 		params.Set(k, fmt.Sprintf("%v", v))
 	}
 	return params.Encode()
+}
+
+type HttpConfig struct {
+	Protocol string
+	Host     string
+	Port     int
+}
+
+func (c HttpConfig) Url(url string) string {
+	return fmt.Sprintf("%s://%s:%d%s", c.Protocol, c.Host, c.Port, url)
+}
+
+type MsService interface {
+	Env() HttpConfig
+}
+
+func (c *MsHttpsClient) RegisterHttpService(name string, service MsService) {
+	c.serviceMap[name] = service
+}
+
+func (c *MsHttpsClient) Do(service string, method string) MsService {
+	s, ok := c.serviceMap[service]
+	if !ok {
+		panic(fmt.Sprintf("name is %s service is not registered", service))
+	}
+	// 给要调用的方法复赋值
+	t := reflect.TypeOf(s)
+	v := reflect.ValueOf(s)
+	if t.Kind() != reflect.Pointer {
+		panic(fmt.Sprintf("service is not a pointer"))
+	}
+	tVar := t.Elem()
+	vVar := v.Elem()
+	fieldIndex := -1
+	for i := 0; i < tVar.NumField(); i++ {
+		name := tVar.Field(i).Name
+		if name == method {
+			fieldIndex = i
+			break
+		}
+	}
+	if fieldIndex == -1 {
+		panic(fmt.Sprintf("method is not found"))
+	}
+
+	// TODO 这里判断 service 实例内指定属性为nil（该url未被使用）再做赋值，
+	// TODO 这个赋值动作也可以在注册服务时就循环遍历掉，免去这里的动作
+
+	tag := tVar.Field(fieldIndex).Tag
+	tagInfo := tag.Get("msrpc")
+	if tagInfo == "" {
+		panic(fmt.Sprintf("msrpc tag is not found"))
+	}
+
+	split := strings.Split(tagInfo, ",")
+	if len(split) != 2 {
+		panic(fmt.Sprintf("msrpc tag is not valid"))
+	}
+
+	methodType := split[0]
+	path := split[1]
+	config := s.Env()
+
+	f := func(args map[string]interface{}) ([]byte, error) {
+		if methodType == GET {
+			return c.Get(config.Url(path), args)
+		} else if methodType == POST_JSON {
+			return c.PostJSON(config.Url(path), args)
+		} else if methodType == POST_FORM {
+			return c.PostForm(config.Url(path), args)
+		}
+		return nil, errors.New("msrpc tag method is not valid")
+	}
+
+	of := reflect.ValueOf(f)
+	vVar.Field(fieldIndex).Set(of)
+
+	return s
 }
